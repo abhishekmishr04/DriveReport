@@ -453,7 +453,24 @@
 // ══════════════════════════════════════════════
 // !! REPLACE THIS WITH YOUR CLOUDFLARE WORKER URL !!
 // ══════════════════════════════════════════════
-const WORKER_URL = "https://dsr-api.dsrwgg1.workers.dev";  // API runs on same Vercel domain
+async function api(action, method='GET', body=null, id=null) {
+  let url = `${WORKER_URL}/?action=${action}`;
+  if (id) url += `&id=${id}`;
+
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' }
+  };
+
+  if (body) opts.body = JSON.stringify(body);
+
+  const r = await fetch(url, opts);
+  const data = await r.json();
+
+  if (!r.ok) throw new Error(data.error || 'API error');
+
+  return data;
+} // API runs on same Vercel domain
 
 // ══════════════════════════════════════════════
 // DSR COLUMN MAP
