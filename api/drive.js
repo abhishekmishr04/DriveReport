@@ -2,6 +2,9 @@
 export const config = {
   runtime: 'nodejs'
 };
+const SA_EMAIL = process.env.SA_EMAIL;
+const SA_KEY = process.env.SA_KEY;
+const FOLDER_ID = process.env.FOLDER_ID;
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const UPLOAD_API= "https://www.googleapis.com/upload/drive/v3";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
