@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/api/health", "destination": "/api/drive?action=health" },
+    { "source": "/api/list",   "destination": "/api/drive?action=list"   },
+    { "source": "/api/save",   "destination": "/api/drive?action=save"   },
+    { "source": "/api/load",   "destination": "/api/drive?action=load"   },
+    { "source": "/api/delete", "destination": "/api/drive?action=delete" }
+  ]
+}
