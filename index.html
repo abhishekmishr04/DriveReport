@@ -509,6 +509,50 @@ async function api(path, method='GET', body=null) {
 // ══════════════════════════════════════════════
 async function init() {
   try {
+    console.log("INIT START");
+
+    await api('health');
+    console.log("Health OK");
+
+    await api('list');
+    console.log("List OK");
+
+    // ✅ mark connected
+    DRIVE_OK = true;
+
+    // ✅ update UI
+    setDriveChip('ok', '✓ Team Drive connected');
+
+    const banner = document.getElementById('driveBannerTitle');
+    if (banner) {
+      banner.textContent = '✓ Team Drive connected';
+    }
+
+    const btn1 = document.getElementById('btnSave');
+    const btn2 = document.getElementById('btnSave2');
+
+    if (btn1) btn1.disabled = false;
+    if (btn2) btn2.disabled = false;
+
+    console.log("INIT SUCCESS");
+
+    // load history
+    loadHistoryPanel();
+
+  } catch (err) {
+    console.error("INIT FAILED:", err);
+
+    DRIVE_OK = false;
+
+    setDriveChip('error', 'Drive unavailable');
+
+    const banner = document.getElementById('driveBannerTitle');
+    if (banner) {
+      banner.textContent = '⚠ Drive unavailable';
+    }
+  }
+}  {
+  try {
     async function init() {
   try {
     console.log("Checking Drive...");
