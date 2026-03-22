@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DSR Brand Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --pri:#0a0f1e; --acc:#4f8ef7; --acc2:#38d9a9;
+      --warn:#fbbf24; --red:#f87171; --ok:#34d399;
+      --bg:#f0f4f8; --card:#fff;
+      --border:#e2e8f0; --muted:#64748b;
+      --drive:#34a853;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);font-family:'Sora',sans-serif;min-height:100vh}
+    code,.mono{font-family:'JetBrains Mono',monospace}
+
+    /* ── TOPBAR ── */
+    .topbar{
+      background:var(--pri);color:#fff;height:52px;
+      padding:0 22px;display:flex;align-items:center;
+      justify-content:space-between;position:sticky;top:0;z-index:300;
+      box-shadow:0 1px 0 rgba(255,255,255,.05),0 4px 24px rgba(0,0,0,.5);
+    }
+    .brand{display:flex;align-items:center;gap:10px}
+    .brand-pulse{
+      width:8px;height:8px;background:#4f8ef7;border-radius:50%;
+      box-shadow:0 0 0 0 rgba(79,142,247,.5);
+      animation:pulse 2s infinite;
+    }
+    @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(79,142,247,.5)}70%{box-shadow:0 0 0 8px rgba(79,142,247,0)}100%{box-shadow:0 0 0 0 rgba(79,142,247,0)}}
+    .brand h1{font-size:.9rem;font-weight:800;letter-spacing:.2px;margin:0}
+    .topbar-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+
+    /* drive status chip */
+    .drive-chip{
+      display:flex;align-items:center;gap:6px;
+      background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.25);
+      border-radius:20px;padding:3px 10px;font-size:.7rem;font-weight:700;color:#34d399;
+    }
+    .drive-chip.saving{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25);color:#fbbf24}
+    .drive-chip.error{background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.25);color:#f87171}
+    .drive-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+
+    .tbtn{
+      background:rgba(255,255,255,.07);color:#fff;border:1px solid rgba(255,255,255,.1);
+      border-radius:7px;padding:5px 13px;font-size:.73rem;font-weight:700;
+      cursor:pointer;display:flex;align-items:center;gap:5px;transition:.15s;
+      font-family:'Sora',sans-serif;
+    }
+    .tbtn:hover{background:rgba(255,255,255,.14)}
+    .tbtn.green{background:rgba(52,168,83,.2);border-color:rgba(52,168,83,.4);color:#4ade80}
+    .tbtn.green:hover{background:rgba(52,168,83,.3)}
+    .tbtn.blue{background:rgba(79,142,247,.2);border-color:rgba(79,142,247,.4);color:#93c5fd}
+    .tbtn.blue:hover{background:rgba(79,142,247,.3)}
+
+    /* ── UPLOAD SCREEN ── */
+    #uploadScreen{max-width:620px;margin:0 auto;padding:36px 16px 40px}
+    .up-hero{text-align:center;margin-bottom:24px}
+    .up-hero h2{font-size:1.55rem;font-weight:800;color:var(--pri);margin-bottom:5px}
+    .up-hero p{color:var(--muted);font-size:.84rem}
+
+    /* drive connected banner */
+    .drive-banner{
+      display:flex;align-items:center;gap:12px;
+      background:linear-gradient(135deg,#f0fdf4,#dcfce7);
+      border:1.5px solid #86efac;border-radius:12px;
+      padding:12px 16px;margin-bottom:18px;
+    }
+    .drive-banner .db-icon{font-size:1.4rem}
+    .drive-banner .db-text strong{font-size:.82rem;font-weight:800;color:#14532d;display:block}
+    .drive-banner .db-text span{font-size:.72rem;color:#166534}
+
+    /* upload zone */
+    .upload-zone{
+      border:2px dashed #93c5fd;background:#fff;border-radius:16px;
+      padding:42px 24px;text-align:center;cursor:pointer;transition:.2s;
+    }
+    .upload-zone:hover,.upload-zone.drag{border-color:var(--acc);background:#eff6ff}
+    .upload-zone i{font-size:2.5rem;color:#93c5fd;margin-bottom:10px;display:block}
+    .upload-zone h3{font-size:.98rem;font-weight:800;color:var(--pri);margin-bottom:4px}
+    .upload-zone p{font-size:.76rem;color:var(--muted)}
+    #fileInput{display:none}
+
+    /* history */
+    .history-panel{background:#fff;border-radius:14px;padding:16px 18px;
+      box-shadow:0 2px 12px rgba(0,0,0,.05);margin-top:18px}
+    .hp-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .hp-header h3{font-size:.8rem;font-weight:800;color:var(--pri);
+      display:flex;align-items:center;gap:7px;margin:0}
+    .hi-row{display:flex;align-items:center;gap:10px;padding:9px 11px;
+      border-radius:9px;background:#f8fafc;margin-bottom:6px;
+      border:1px solid var(--border);cursor:pointer;transition:.14s}
+    .hi-row:hover{background:#eff6ff;border-color:#93c5fd}
+    .hi-icon{width:32px;height:32px;background:#dcfce7;border-radius:7px;
+      display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0}
+    .hi-info{flex:1;overflow:hidden}
+    .hi-name{font-size:.76rem;font-weight:700;color:var(--pri);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .hi-meta{font-size:.66rem;color:var(--muted)}
+    .btn-load{background:var(--acc);color:#fff;border:none;border-radius:6px;
+      padding:4px 10px;font-size:.68rem;font-weight:700;cursor:pointer;flex-shrink:0;
+      font-family:'Sora',sans-serif}
+    .btn-load:hover{background:#3b7de8}
+    .btn-del{background:none;border:none;color:#94a3b8;cursor:pointer;
+      padding:4px;font-size:.8rem;flex-shrink:0;transition:.12s}
+    .btn-del:hover{color:var(--red)}
+
+    /* ── REPORT SCREEN ── */
+    #reportScreen{display:none;padding:12px 16px 32px;max-width:1400px;margin:0 auto}
+
+    /* loading bar */
+    .loading-bar{height:3px;background:linear-gradient(90deg,var(--acc),#38d9a9,var(--acc));
+      background-size:200%;animation:shim 1.4s linear infinite;border-radius:2px;display:none;margin-bottom:8px}
+    @keyframes shim{0%{background-position:200%}100%{background-position:-200%}}
+
+    /* filter bar */
+    .fbar{background:#fff;border-radius:12px;padding:9px 14px;
+      box-shadow:0 1px 6px rgba(0,0,0,.05);display:flex;
+      flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:10px}
+    .flabel{font-size:.68rem;font-weight:800;text-transform:uppercase;
+      letter-spacing:.07em;color:var(--muted)}
+
+    /* day nav */
+    .day-nav{display:flex;align-items:center;gap:3px;background:#f8fafc;
+      border:1.5px solid var(--border);border-radius:8px;padding:2px 5px}
+    .day-btn{background:none;border:none;cursor:pointer;width:24px;height:24px;
+      border-radius:5px;color:var(--muted);font-size:.9rem;font-weight:800;
+      display:flex;align-items:center;justify-content:center;transition:.12s}
+    .day-btn:hover:not(:disabled){background:var(--border);color:var(--pri)}
+    .day-btn:disabled{opacity:.28;cursor:default}
+    .day-label{font-size:.76rem;font-weight:800;color:var(--pri);
+      min-width:52px;text-align:center;white-space:nowrap;font-family:'JetBrains Mono',monospace}
+
+    /* who uploaded badge */
+    .uploader-badge{display:inline-flex;align-items:center;gap:5px;
+      background:#f0f9ff;border:1px solid #bae6fd;border-radius:20px;
+      padding:3px 10px;font-size:.68rem;font-weight:700;color:#0369a1}
+
+    /* KPI cards */
+    .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));
+      gap:8px;margin-bottom:10px}
+    .kpi-card{background:#fff;border-radius:11px;padding:11px 13px;
+      box-shadow:0 1px 6px rgba(0,0,0,.05);border-left:3px solid transparent}
+    .kpi-lbl{font-size:.58rem;font-weight:800;text-transform:uppercase;
+      letter-spacing:.08em;color:var(--muted);margin-bottom:4px}
+    .kpi-val{font-size:1.05rem;font-weight:800;color:var(--pri);
+      font-family:'JetBrains Mono',monospace}
+    .kpi-sub{font-size:.62rem;color:var(--muted);margin-top:1px}
+
+    /* report table */
+    .rpt-wrap{background:#fff;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,.08);overflow:hidden}
+    .rpt-brand-hdr{
+      background:linear-gradient(135deg,#fde68a 0%,#f59e0b 45%,#f97316 100%);
+      text-align:center;padding:13px 20px;font-size:1.08rem;font-weight:900;
+      color:#7c2d12;letter-spacing:.3px;font-family:'Sora',sans-serif;
+    }
+    .rpt-hint{text-align:center;background:#fff7ed;padding:5px;font-size:.7rem;
+      color:#92400e;font-weight:600;border-bottom:2px solid #fed7aa}
+
+    .rpt-table{width:100%;border-collapse:collapse;font-size:.83rem}
+    .rpt-table th,.rpt-table td{border:1px solid #e5e7eb;padding:9px 13px;text-align:right;white-space:nowrap}
+    .rpt-table th:first-child,.rpt-table td:first-child{text-align:left;min-width:110px}
+    .gh-portal{background:#f8fafc;font-weight:800;font-size:.74rem;color:#374151;
+      text-align:left!important;border-right:2px solid #d1d5db}
+    .gh-today{background:linear-gradient(135deg,#fef3c7,#fde68a);color:#92400e;
+      font-weight:800;font-size:.76rem;text-align:center!important;border-bottom:2px solid #f59e0b}
+    .gh-mtd{background:linear-gradient(135deg,#dbeafe,#bfdbfe);color:#1e40af;
+      font-weight:800;font-size:.76rem;text-align:center!important;border-bottom:2px solid #3b82f6}
+    .gh-prev{background:linear-gradient(135deg,#dcfce7,#bbf7d0);color:#166534;
+      font-weight:800;font-size:.76rem;text-align:center!important;border-bottom:2px solid #22c55e}
+    .sh-today{background:#fffbeb;color:#92400e;font-weight:700;font-size:.7rem;text-align:right!important}
+    .sh-mtd{background:#eff6ff;color:#1e40af;font-weight:700;font-size:.7rem;text-align:right!important}
+    .sh-prev{background:#f0fdf4;color:#166534;font-weight:700;font-size:.7rem;text-align:right!important}
+    .rpt-table tbody tr:hover td{background:#fafbff}
+    .sales-cell{font-weight:600;color:#1e293b}
+    .prev-s-cell{background:#f0fdf4;font-weight:600;color:#166534}
+    .spend-cell,.prev-sp-cell{background:#fffbeb;padding:0!important}
+    .spend-inp{border:none;background:transparent;width:100%;min-width:100px;
+      text-align:right;padding:9px 13px;font-size:.83rem;font-family:'JetBrains Mono',monospace;
+      outline:none;color:#92400e;font-weight:600}
+    .spend-inp::placeholder{color:#d97706;opacity:.5;font-style:italic;font-size:.7rem;font-family:'Sora',sans-serif}
+    .spend-inp:focus{background:#fef9c3}
+    .enter-cell{background:#f0f9ff!important;padding:0!important}
+    .enter-inp{border:none;background:transparent;width:100%;min-width:100px;
+      text-align:right;padding:9px 13px;font-size:.83rem;font-family:'JetBrains Mono',monospace;
+      outline:none;color:#0369a1;font-weight:700}
+    .enter-inp::placeholder{color:#7dd3fc;font-style:italic;font-size:.68rem;font-family:'Sora',sans-serif}
+    .enter-inp:focus{background:#e0f2fe}
+    .enter-lm-cell{background:#f0fdf4!important;padding:0!important}
+    .enter-lm-inp{border:none;background:transparent;width:100%;min-width:100px;
+      text-align:right;padding:9px 13px;font-size:.83rem;font-family:'JetBrains Mono',monospace;
+      outline:none;color:#166534;font-weight:700}
+    .enter-lm-inp::placeholder{color:#86efac;font-style:italic;font-size:.68rem;font-family:'Sora',sans-serif}
+    .enter-lm-inp:focus{background:#dcfce7}
+    .rpt-total td{background:#f1f5f9;font-weight:800;font-size:.83rem;
+      border-top:2px solid #94a3b8;color:var(--pri)}
+    .rpt-total .spend-cell,.rpt-total .prev-sp-cell{background:#fef3c7}
+    .rpt-total .prev-s-cell{background:#dcfce7}
+
+    /* portal pills */
+    .pb-fk{background:#fff7ed;color:#9a3412;border-radius:20px;padding:2px 9px;font-size:.68rem;font-weight:700}
+    .pb-az{background:#f0fdf4;color:#166534;border-radius:20px;padding:2px 9px;font-size:.68rem;font-weight:700}
+    .pb-ms{background:#fdf4ff;color:#7e22ce;border-radius:20px;padding:2px 9px;font-size:.68rem;font-weight:700}
+    .pb-mn{background:#ecfdf5;color:#065f46;border-radius:20px;padding:2px 9px;font-size:.68rem;font-weight:700}
+    .pb-zt{background:#fef9c3;color:#713f12;border-radius:20px;padding:2px 9px;font-size:.68rem;font-weight:700}
+    .pb-oth{background:#f1f5f9;color:#475569;border-radius:20px;padding:2px 9px;font-size:.68rem;font-weight:700}
+
+    .legend-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+      padding:8px 14px;background:#fafafa;border-top:1px solid #f1f5f9;font-size:.68rem;color:var(--muted)}
+    .leg-dot{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:3px}
+
+    /* toast */
+    .toast-wrap{position:fixed;bottom:18px;right:18px;z-index:9999;
+      display:flex;flex-direction:column;gap:6px}
+    .toast-msg{background:#0a0f1e;color:#fff;border-radius:9px;padding:9px 15px;
+      font-size:.76rem;animation:fup .28s ease;box-shadow:0 4px 20px rgba(0,0,0,.3);font-weight:600}
+    .toast-msg.ok{background:#14532d}.toast-msg.err{background:#7f1d1d}.toast-msg.info{background:#1e3a5f}
+
+    /* modal */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;
+      display:flex;align-items:center;justify-content:center}
+    .modal-box{background:#fff;border-radius:16px;width:92%;max-width:560px;
+      box-shadow:0 24px 60px rgba(0,0,0,.25);overflow:hidden;animation:fup .22s ease}
+    .modal-hdr{background:var(--pri);color:#fff;padding:14px 18px;
+      display:flex;align-items:center;justify-content:space-between}
+    .modal-hdr h2{font-size:.88rem;font-weight:800;margin:0}
+    .modal-close{background:rgba(255,255,255,.1);border:none;color:#fff;
+      border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:.9rem}
+    .modal-close:hover{background:rgba(255,255,255,.2)}
+    .modal-body{padding:14px 18px;max-height:420px;overflow-y:auto}
+    .modal-footer{padding:10px 18px;border-top:1px solid var(--border);
+      background:#f8fafc;display:flex;justify-content:flex-end;gap:8px}
+
+    .df-row{display:flex;align-items:center;gap:9px;padding:9px 11px;
+      border-radius:9px;border:1px solid var(--border);margin-bottom:7px;
+      background:#fafafa;cursor:pointer;transition:.13s}
+    .df-row:hover{background:#eff6ff;border-color:#93c5fd}
+    .df-icon{width:32px;height:32px;background:#dcfce7;border-radius:7px;
+      display:flex;align-items:center;justify-content:center;font-size:.82rem;flex-shrink:0}
+    .df-info{flex:1;overflow:hidden}
+    .df-name{font-size:.76rem;font-weight:700;color:var(--pri);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .df-meta{font-size:.65rem;color:var(--muted)}
+    .df-load{background:var(--acc);color:#fff;border:none;border-radius:6px;
+      padding:4px 11px;font-size:.68rem;font-weight:700;cursor:pointer;margin-left:auto;
+      flex-shrink:0;font-family:'Sora',sans-serif}
+    .df-load:hover{background:#3b7de8}
+    .df-del{background:none;border:none;color:#94a3b8;cursor:pointer;
+      padding:4px 6px;font-size:.8rem;transition:.12s}
+    .df-del:hover{color:var(--red)}
+    .modal-empty{text-align:center;padding:28px;color:var(--muted);font-size:.82rem}
+    .modal-empty i{font-size:1.8rem;display:block;margin-bottom:8px;color:#cbd5e1}
+
+    @keyframes fup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .anim{animation:fup .35s ease both}
+    .d1{animation-delay:.05s}.d2{animation-delay:.1s}.d3{animation-delay:.16s}
+
+    @media print{
+      .no-print{display:none!important}
+      .topbar{position:relative;box-shadow:none}
+      .rpt-wrap{box-shadow:none;border:1px solid #d1d5db}
+    }
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+  </style>
+</head>
+<body>
+
+<!-- ═══ TOPBAR ═══ -->
+<div class="topbar no-print">
+  <div class="brand">
+    <span class="brand-pulse"></span>
+    <h1>DSR Brand Dashboard</h1>
+  </div>
+  <div class="topbar-actions">
+    <div class="drive-chip" id="driveChip">
+      <span class="drive-dot"></span>
+      <span id="driveChipText">Connecting to Drive…</span>
+    </div>
+    <span id="topFileName" style="font-size:.7rem;color:#94a3b8"></span>
+    <button class="tbtn blue" onclick="openDriveModal()">
+      <i class="fas fa-folder-open"></i> Load from Drive
+    </button>
+    <button class="tbtn green" id="btnSave" onclick="saveToDrive(false)" disabled>
+      <i class="fas fa-cloud-upload-alt"></i> Save to Drive
+    </button>
+    <label for="fileInput" class="tbtn" style="cursor:pointer">
+      <i class="fas fa-upload"></i> New File
+    </label>
+    <button class="tbtn" onclick="exportExcel()">
+      <i class="fas fa-file-excel"></i> Export
+    </button>
+    <button class="tbtn no-print" onclick="window.print()">
+      <i class="fas fa-print"></i>
+    </button>
+  </div>
+</div>
+<input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFile(this.files[0])">
+
+<!-- ═══ UPLOAD SCREEN ═══ -->
+<div id="uploadScreen">
+  <div class="up-hero">
+    <h2>DSR Brand Report</h2>
+    <p>Upload your DSR Excel — auto-saves to the shared team Drive folder</p>
+  </div>
+
+  <div class="drive-banner" id="driveBanner">
+    <div class="db-icon"><i class="fab fa-google-drive" style="color:#34a853"></i></div>
+    <div class="db-text">
+      <strong id="driveBannerTitle">Connecting to team Drive…</strong>
+      <span id="driveBannerSub">All uploads auto-save to the shared <em>DSR Reports</em> folder</span>
+    </div>
+  </div>
+
+  <!-- Recent reports -->
+  <div class="history-panel" id="historyPanel">
+    <div class="hp-header">
+      <h3><i class="fab fa-google-drive" style="color:#34a853"></i> Recent Team Reports</h3>
+      <button class="btn-load" onclick="openDriveModal()" style="background:#475569">View All</button>
+    </div>
+    <div id="historyList">
+      <div style="text-align:center;padding:14px;font-size:.76rem;color:var(--muted)">
+        <i class="fas fa-spinner fa-spin me-2"></i>Loading…
+      </div>
+    </div>
+  </div>
+
+  <div class="upload-zone mt-3" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <i class="fas fa-file-excel"></i>
+    <h3>Drop your DSR Excel here</h3>
+    <p>or click to browse · .xlsx / .xls</p>
+    <p style="font-size:.68rem;color:#94a3b8;margin-top:8px">
+      Saves to shared folder: <strong>DSR Reports</strong> in the team Drive
+    </p>
+  </div>
+</div>
+
+<!-- ═══ REPORT SCREEN ═══ -->
+<div id="reportScreen">
+  <div id="loadingBar" class="loading-bar"></div>
+
+  <!-- Filter bar -->
+  <div class="fbar no-print anim">
+    <span class="flabel">Brand</span>
+    <select id="rBrand" class="form-select form-select-sm" style="width:200px" onchange="generateReport()">
+      <option value="">— Select Brand —</option>
+    </select>
+
+    <span class="flabel">Day</span>
+    <div class="day-nav">
+      <button class="day-btn" id="btnPrev" onclick="changeDay(-1)" disabled>‹</button>
+      <span class="day-label" id="dayLabel">—</span>
+      <button class="day-btn" id="btnNext" onclick="changeDay(1)" disabled>›</button>
+    </div>
+
+    <span class="flabel">Today</span>
+    <input type="text" id="rCol1" class="form-control form-control-sm" style="width:88px">
+    <span class="flabel">MTD</span>
+    <input type="text" id="rCol2" class="form-control form-control-sm" style="width:126px">
+    <span class="flabel">Last Mo.</span>
+    <input type="text" id="rCol3" class="form-control form-control-sm" style="width:78px">
+
+    <button class="btn btn-primary btn-sm" onclick="generateReport()">
+      <i class="fas fa-magic me-1"></i>Generate
+    </button>
+    <button class="btn btn-success btn-sm no-print" onclick="exportExcel()">
+      <i class="fas fa-file-excel me-1"></i>Export
+    </button>
+    <button class="btn btn-sm no-print" style="background:#34a853;color:#fff"
+            id="btnSave2" onclick="saveToDrive(false)" disabled>
+      <i class="fas fa-cloud-upload-alt me-1"></i>Save to Drive
+    </button>
+
+    <span id="uploaderBadge" style="display:none" class="uploader-badge ms-auto">
+      <i class="fas fa-user me-1"></i><span id="uploaderName"></span>
+    </span>
+  </div>
+
+  <!-- KPI cards -->
+  <div class="kpi-grid anim d1" id="kpiCards"></div>
+
+  <!-- Table -->
+  <div class="rpt-wrap anim d2">
+    <div class="rpt-brand-hdr" id="rptHdr">Select a brand above</div>
+    <div class="rpt-hint no-print">
+      <i class="fas fa-info-circle me-1"></i>
+      <span style="background:#fde68a;padding:1px 6px;border-radius:3px">Yellow</span> = Ads Spend &nbsp;
+      <span style="background:#bae6fd;padding:1px 6px;border-radius:3px">Blue</span> = No DSR data &nbsp;
+      <span style="background:#bbf7d0;padding:1px 6px;border-radius:3px">Green</span> = Last Month
+    </div>
+    <div class="table-responsive">
+      <table class="rpt-table">
+        <thead>
+          <tr>
+            <th class="gh-portal" rowspan="2">Portal</th>
+            <th colspan="2" class="gh-today" id="hdr1">Today</th>
+            <th colspan="2" class="gh-mtd"   id="hdr2">MTD</th>
+            <th colspan="2" class="gh-prev"  id="hdr3">Last Month</th>
+          </tr>
+          <tr>
+            <th class="sh-today">Sales</th><th class="sh-today">Ads Spend</th>
+            <th class="sh-mtd">Sales</th><th class="sh-mtd">Ads Spend</th>
+            <th class="sh-prev">Sales</th><th class="sh-prev">Ads Spend</th>
+          </tr>
+        </thead>
+        <tbody id="rptBody">
+          <tr><td colspan="7" class="text-center text-muted py-4">Upload a DSR file and select a brand</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="legend-bar">
+      <span><span class="leg-dot" style="background:#f1f5f9;border:1px solid #d1d5db"></span>Auto from DSR</span>
+      <span><span class="leg-dot" style="background:#fffbeb;border:1px solid #f59e0b"></span>Ads Spend (manual)</span>
+      <span><span class="leg-dot" style="background:#f0fdf4;border:1px solid #22c55e"></span>Last Month</span>
+      <span><span class="leg-dot" style="background:#e0f2fe;border:1px solid #38bdf8"></span>No DSR data</span>
+      <span class="ms-auto no-print" style="font-size:.66rem">
+        <i class="fab fa-google-drive me-1" style="color:#34a853"></i>Team shared Drive
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DRIVE MODAL ═══ -->
+<div id="driveModal" style="display:none">
+  <div class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-hdr">
+        <h2><i class="fab fa-google-drive me-2"></i>Team Reports — Google Drive</h2>
+        <button class="modal-close" onclick="closeDriveModal()">✕</button>
+      </div>
+      <div class="modal-body" id="driveModalBody">
+        <div style="text-align:center;padding:18px;font-size:.8rem;color:var(--muted)">
+          <i class="fas fa-spinner fa-spin me-2"></i>Loading…
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-sm btn-outline-secondary" onclick="closeDriveModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+
+// ══════════════════════════════════════════════
+// !! REPLACE THIS WITH YOUR CLOUDFLARE WORKER URL !!
+// ══════════════════════════════════════════════
+const WORKER_URL = '';  // API runs on same Vercel domain
+
+// ══════════════════════════════════════════════
+// DSR COLUMN MAP
+// ══════════════════════════════════════════════
+const C_RESP=1,C_PORTAL=2,C_SELLER=3,C_LM=19,C_STGT=21;
+const DAY_COLS=[25,26,27,28,29,30,31,37,38,39,40,41,42,43,
+  50,51,52,53,54,55,56,63,64,65,66,67,68,69,76,77,78];
+const PORTAL_CSS={
+  'Flipkart':'pb-fk','Shopsy':'pb-fk',
+  'Amazon 3P':'pb-az','Amazon B2B':'pb-az','Amazon':'pb-az','Amazon UAE':'pb-az',
+  'Meesho':'pb-ms','Myntra':'pb-mn','Zepto':'pb-zt','Blinkit':'pb-az',
+  'Jio Mart':'pb-oth','Jio Mart ':'pb-oth','Alpha':'pb-oth'
+};
+const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let PARSED_DATA={}, DAYS_ELAPSED=1, SELECTED_DAY=1;
+let MONTH_LABEL='', LAST_MONTH_LBL='', CURRENT_FILE='';
+let DRIVE_OK = false;
+
+// ══════════════════════════════════════════════
+// WORKER API — all Drive calls go through here
+// ══════════════════════════════════════════════
+async function api(path, method='GET', body=null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(WORKER_URL + path, opts);
+  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.error || `API ${r.status}`); }
+  return r.json();
+}
+
+// ══════════════════════════════════════════════
+// INIT — check worker health on load
+// ══════════════════════════════════════════════
+async function init() {
+  try {
+    await api('/api/health');
+    DRIVE_OK = true;
+    setDriveChip('ok', '✓ Team Drive connected');
+    document.getElementById('driveBannerTitle').textContent = '✓ Team Drive connected';
+    document.getElementById('btnSave').disabled = false;
+    document.getElementById('btnSave2').disabled = false;
+    loadHistoryPanel();
+  } catch(err) {
+    DRIVE_OK = false;
+    setDriveChip('error', 'Drive unavailable');
+    document.getElementById('driveBannerTitle').textContent = '⚠ Drive unavailable — check worker setup';
+    console.error('Worker health check failed:', err.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// SAVE TO DRIVE
+// ══════════════════════════════════════════════
+async function saveToDrive(silent=false) {
+  if (!DRIVE_OK) { if (!silent) toast('Drive not connected — check WORKER_URL', 'err'); return; }
+  if (!Object.keys(PARSED_DATA).length) { if (!silent) toast('No data to save', 'err'); return; }
+
+  setDriveChip('saving', 'Saving…');
+  if (!silent) toast('Saving to team Drive…', 'info');
+
+  const now    = new Date();
+  const date   = now.toISOString().split('T')[0];
+  const time   = now.toTimeString().slice(0,5).replace(':','h');
+  const brands = Object.keys(PARSED_DATA).sort().join('_').replace(/[^a-zA-Z0-9_]/g,'_').slice(0,40);
+  const fileName = `DSR_${brands}_${date}_${time}.json`;
+
+  try {
+    await api('/api/save', 'POST', {
+      fileName,
+      data: {
+        savedAt: now.toISOString(),
+        sourceFile: CURRENT_FILE,
+        monthLabel: MONTH_LABEL,
+        lastMonthLabel: LAST_MONTH_LBL,
+        daysElapsed: DAYS_ELAPSED,
+        parsedData: PARSED_DATA
+      }
+    });
+    setDriveChip('ok', `Saved: ${fileName}`);
+    if (!silent) toast('✓ Saved to team Drive!', 'ok');
+    loadHistoryPanel();
+    return true;
+  } catch(err) {
+    setDriveChip('ok', 'Team Drive connected');
+    toast('Save failed: ' + err.message, 'err');
+    return false;
+  }
+}
+
+// ══════════════════════════════════════════════
+// LIST & LOAD FROM DRIVE
+// ══════════════════════════════════════════════
+async function listFiles() {
+  const data = await api('/api/list');
+  return data.files || [];
+}
+
+async function loadFile(fileId) {
+  return api(`/api/load?id=${fileId}`);
+}
+
+async function deleteFileFromDrive(fileId) {
+  return api('/api/delete', 'POST', { id: fileId });
+}
+
+async function openDriveModal() {
+  document.getElementById('driveModal').style.display = 'block';
+  document.getElementById('driveModalBody').innerHTML =
+    '<div style="text-align:center;padding:18px;font-size:.8rem;color:var(--muted)"><i class="fas fa-spinner fa-spin me-2"></i>Fetching team reports…</div>';
+  try {
+    const files = await listFiles();
+    renderDriveModal(files);
+  } catch(err) {
+    document.getElementById('driveModalBody').innerHTML =
+      `<div class="modal-empty"><i class="fas fa-exclamation-triangle" style="color:#f87171"></i><p style="color:#ef4444">${err.message}</p></div>`;
+  }
+}
+
+function renderDriveModal(files) {
+  const body = document.getElementById('driveModalBody');
+  if (!files.length) {
+    body.innerHTML = `<div class="modal-empty">
+      <i class="fab fa-google-drive"></i>
+      <p style="font-weight:700">No saved reports yet</p>
+      <p>Upload a DSR Excel file to create the first team report.</p>
+    </div>`;
+    return;
+  }
+  body.innerHTML = `<p style="font-size:.7rem;color:var(--muted);margin-bottom:10px">
+    ${files.length} report(s) in team Drive</p>` +
+    files.map(f => {
+      const dt  = f.modifiedTime ? new Date(f.modifiedTime).toLocaleString('en-IN') : '';
+      const dn  = f.name.replace(/^DSR_/,'').replace(/\.json$/,'').replace(/_/g,' ');
+      const fid = f.id;
+      return `
+      <div class="df-row">
+        <div class="df-icon"><i class="fas fa-chart-bar" style="color:#166534"></i></div>
+        <div class="df-info">
+          <div class="df-name">${esc(dn)}</div>
+          <div class="df-meta">${dt}</div>
+        </div>
+        <button class="df-load" onclick="loadFromDrive('${fid}','${esc(f.name)}')">
+          <i class="fas fa-download me-1"></i>Load
+        </button>
+        <button class="df-del" title="Delete" onclick="confirmDelete('${fid}','${esc(f.name)}')">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>`;
+    }).join('');
+}
+
+function closeDriveModal() { document.getElementById('driveModal').style.display='none'; }
+
+async function loadFromDrive(fileId, fileName) {
+  document.getElementById('driveModalBody').innerHTML =
+    `<div style="text-align:center;padding:18px;font-size:.8rem;color:var(--muted)">
+       <i class="fas fa-spinner fa-spin me-2"></i>Loading "${esc(fileName)}"…</div>`;
+  try {
+    const data = await loadFile(fileId);
+    PARSED_DATA    = data.parsedData || {};
+    MONTH_LABEL    = data.monthLabel || '';
+    LAST_MONTH_LBL = data.lastMonthLabel || '';
+    DAYS_ELAPSED   = data.daysElapsed || 1;
+    SELECTED_DAY   = DAYS_ELAPSED;
+    CURRENT_FILE   = data.sourceFile || fileName;
+
+    document.getElementById('topFileName').textContent = `[Drive] ${CURRENT_FILE}`;
+    populateBrandDD();
+    enableNav();
+    updateDayLabels();
+    closeDriveModal();
+
+    document.getElementById('uploadScreen').style.display='none';
+    document.getElementById('reportScreen').style.display='block';
+    setDriveChip('ok', `Loaded: ${fileName}`);
+    toast('✓ Report loaded from team Drive', 'ok');
+
+    const brands=Object.keys(PARSED_DATA);
+    if (brands.length===1) { document.getElementById('rBrand').value=brands[0]; generateReport(); }
+  } catch(err) {
+    document.getElementById('driveModalBody').innerHTML=
+      `<div class="modal-empty"><i class="fas fa-exclamation-triangle" style="color:#f87171"></i>
+        <p style="color:#ef4444">${err.message}</p>
+        <button class="btn btn-sm btn-outline-secondary mt-2" onclick="openDriveModal()">← Back</button>
+      </div>`;
+  }
+}
+
+async function confirmDelete(fileId, fileName) {
+  if (!confirm(`Delete "${fileName}" from team Drive?\n\nThis cannot be undone.`)) return;
+  try {
+    await deleteFileFromDrive(fileId);
+    toast('Deleted from Drive', 'ok');
+    openDriveModal(); // refresh
+  } catch(err) {
+    toast('Delete failed: ' + err.message, 'err');
+  }
+}
+
+async function loadHistoryPanel() {
+  const list = document.getElementById('historyList');
+  try {
+    const files = await listFiles();
+    if (!files.length) {
+      list.innerHTML='<p style="font-size:.73rem;color:var(--muted);text-align:center;padding:8px">No saved reports yet</p>';
+      return;
+    }
+    list.innerHTML = files.slice(0,5).map(f => {
+      const dt = f.modifiedTime ? new Date(f.modifiedTime).toLocaleDateString('en-IN') : '';
+      const dn = f.name.replace(/^DSR_/,'').replace(/\.json$/,'').replace(/_/g,' ');
+      return `<div class="hi-row" onclick="loadFromDrive('${f.id}','${esc(f.name)}')">
+        <div class="hi-icon"><i class="fas fa-chart-bar" style="color:#166534"></i></div>
+        <div class="hi-info">
+          <div class="hi-name">${esc(dn)}</div>
+          <div class="hi-meta">${dt}</div>
+        </div>
+        <button class="btn-load" onclick="event.stopPropagation();loadFromDrive('${f.id}','${esc(f.name)}')">Load</button>
+      </div>`;
+    }).join('');
+  } catch {
+    list.innerHTML='<p style="font-size:.73rem;color:var(--muted);text-align:center;padding:8px">Could not reach Drive</p>';
+  }
+}
+
+// ══════════════════════════════════════════════
+// DRAG & DROP
+// ══════════════════════════════════════════════
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+
+// ══════════════════════════════════════════════
+// FILE PARSE
+// ══════════════════════════════════════════════
+function handleFile(file) {
+  if (!file) return;
+  if (!/\.(xlsx|xls)$/i.test(file.name)) { toast('Upload .xlsx or .xls', 'err'); return; }
+  CURRENT_FILE = file.name;
+  document.getElementById('topFileName').textContent = file.name;
+  showLoading(true);
+  const r = new FileReader();
+  r.onload = e => {
+    try { parseWorkbook(XLSX.read(e.target.result, {type:'array',raw:true})); }
+    catch(err) { toast('Parse error: '+err.message,'err'); showLoading(false); }
+  };
+  r.readAsArrayBuffer(file);
+}
+
+function parseWorkbook(wb) {
+  // DEBUG: log all sheet names
+  console.log('All sheets:', wb.SheetNames);
+  
+  const dsrName = wb.SheetNames.find(n => n.trim().toUpperCase()==='DSR');
+  if (!dsrName) {
+    const names = wb.SheetNames.join(' | ');
+    toast('No DSR sheet! Found: ' + names, 'err');
+    console.error('Sheet names in file:', wb.SheetNames);
+    showLoading(false);
+    return;
+  }
+
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[dsrName],{header:1,defval:null,raw:true});
+  console.log('Total rows:', rows.length);
+  console.log('Row 0:', JSON.stringify(rows[0]));
+  console.log('Row 3:', JSON.stringify(rows[3]));
+  console.log('Row 5:', JSON.stringify(rows[5]));
+
+  const sumRow=rows[0], hdrRow=rows[3];
+  DAYS_ELAPSED = Math.round(nv(sumRow[7]))||1;
+  SELECTED_DAY = DAYS_ELAPSED;
+  MONTH_LABEL  = String(hdrRow[9]||'').replace(/tgt|target/gi,'').trim()||'This Month';
+  LAST_MONTH_LBL = prevMonth(MONTH_LABEL, CURRENT_FILE);
+  
+  console.log('Days elapsed:', DAYS_ELAPSED, 'Month:', MONTH_LABEL);
+  updateDayLabels();
+  
+  PARSED_DATA = {};
+  let parsedRows = 0;
+  for (let i=5;i<rows.length;i++) {
+    const row=rows[i],resp=row[C_RESP],portal=row[C_PORTAL],seller=row[C_SELLER];
+    if (!resp||!seller) continue;
+    if (['SUM','SUBTOTAL',' ',''].includes(String(resp).trim())) continue;
+    const sk=String(seller).trim(), pk=String(portal||'').trim();
+    if (!PARSED_DATA[sk]) PARSED_DATA[sk]={brand:sk,resp:String(resp).trim(),portals:{},totals:{lm:0,stgt:0}};
+    const d=PARSED_DATA[sk];
+    if (!d.portals[pk]) d.portals[pk]={lm:0,stgt:0,dailySales:new Array(DAY_COLS.length).fill(0)};
+    DAY_COLS.forEach((col,idx)=>{ d.portals[pk].dailySales[idx]+=col<row.length?nv(row[col]):0; });
+    d.portals[pk].lm+=nv(row[C_LM]); d.portals[pk].stgt+=nv(row[C_STGT]);
+    d.totals.lm+=nv(row[C_LM]); d.totals.stgt+=nv(row[C_STGT]);
+    parsedRows++;
+  }
+  
+  console.log('Brands found:', Object.keys(PARSED_DATA));
+  console.log('Parsed rows:', parsedRows);
+
+  const brandCount = Object.keys(PARSED_DATA).length;
+  if (brandCount === 0) {
+    toast('DSR sheet found but 0 brands detected! Open F12 Console for details.', 'err');
+    console.error('C_RESP=', C_RESP, 'C_PORTAL=', C_PORTAL, 'C_SELLER=', C_SELLER);
+    console.error('Sample row 5:', rows[5]);
+    console.error('Sample row 6:', rows[6]);
+    showLoading(false);
+    return;
+  }
+
+  populateBrandDD(); enableNav();
+  document.getElementById('uploadScreen').style.display='none';
+  document.getElementById('reportScreen').style.display='block';
+  showLoading(false);
+  toast('Loaded ' + brandCount + ' brands successfully!','ok');
+  if (DRIVE_OK) saveToDrive(true).then(()=>loadHistoryPanel());
+  else toast('Drive not connected — report not saved','info');
+
+  // Auto-select first brand if only one, otherwise prompt
+  const brands = Object.keys(PARSED_DATA);
+  if (brands.length === 1) {
+    document.getElementById('rBrand').value = brands[0];
+    generateReport();
+  } else {
+    // scroll to brand selector
+    document.getElementById('rBrand').focus();
+    toast('Select a brand from the dropdown to generate report', 'info');
+  }
+}
+
+function populateBrandDD() {
+  document.getElementById('rBrand').innerHTML =
+    '<option value="">— Select Brand —</option>' +
+    Object.keys(PARSED_DATA).sort().map(s=>`<option value="${s}">${s}</option>`).join('');
+}
+
+// ══════════════════════════════════════════════
+// DAY NAV
+// ══════════════════════════════════════════════
+function changeDay(d) {
+  const nd=SELECTED_DAY+d;
+  if (nd<1||nd>DAYS_ELAPSED) return;
+  SELECTED_DAY=nd; updateDayLabels(); enableNav();
+  if (document.getElementById('rBrand').value) generateReport();
+}
+function updateDayLabels() {
+  document.getElementById('dayLabel').textContent=`Day ${SELECTED_DAY}`;
+  document.getElementById('rCol1').value=`${SELECTED_DAY} ${MONTH_LABEL}`;
+  document.getElementById('rCol2').value=`MTD ${MONTH_LABEL} (1–${SELECTED_DAY})`;
+  document.getElementById('rCol3').value=LAST_MONTH_LBL;
+}
+function enableNav() {
+  document.getElementById('btnPrev').disabled=SELECTED_DAY<=1;
+  document.getElementById('btnNext').disabled=SELECTED_DAY>=DAYS_ELAPSED;
+}
+
+// ══════════════════════════════════════════════
+// GENERATE REPORT
+// ══════════════════════════════════════════════
+function generateReport() {
+  const sk=document.getElementById('rBrand').value; if (!sk) return;
+  const c1=document.getElementById('rCol1').value||'Today';
+  const c2=document.getElementById('rCol2').value||'MTD';
+  const c3=document.getElementById('rCol3').value||'Last Month';
+  ['hdr1','hdr2','hdr3'].forEach((id,i)=>document.getElementById(id).textContent=[c1,c2,c3][i]);
+  const D=PARSED_DATA[sk]; if (!D) return;
+  document.getElementById('rptHdr').textContent=D.brand;
+  buildTable(D,c1,c2,c3); buildKPIs(D,c1,c2,c3);
+}
+
+function buildTable(D,c1,c2,c3) {
+  const sel=SELECTED_DAY;
+  const entries=Object.entries(D.portals).filter(([pk])=>pk!=='')
+    .map(([pk,p])=>({pk,
+      tRs:toLakhs(p.dailySales[sel-1]||0),
+      mRs:toLakhs(p.dailySales.slice(0,sel).reduce((a,b)=>a+b,0)),
+      lRs:toLakhs(p.lm)}))
+    .sort((a,b)=>b.mRs-a.mRs);
+
+  const sc=(val,id,type)=>{
+    if (!val) {
+      if (type==='lm') return `<td class="enter-lm-cell"><input class="enter-lm-inp" type="text" id="${id}" placeholder="Enter…" oninput="recalc()" onblur="fc(this)"></td>`;
+      return `<td class="enter-cell"><input class="enter-inp" type="text" id="${id}" placeholder="Enter…" oninput="recalc()" onblur="fc(this)"></td>`;
+    }
+    return `<td class="${type==='lm'?'prev-s-cell':'sales-cell'}" id="${id}">${fmt(val)}</td>`;
+  };
+
+  const rows=entries.map(({pk,tRs,mRs,lRs},i)=>`
+    <tr>
+      <td><span class="${PORTAL_CSS[pk]||'pb-oth'}">${pk}</span></td>
+      ${sc(tRs,`ts_t1_${i}`,'today')}
+      <td class="spend-cell"><input class="spend-inp" type="text" id="sp_t1_${i}" placeholder="Enter spend…" oninput="recalc()" onblur="fc(this)"></td>
+      ${sc(mRs,`ts_t2_${i}`,'mtd')}
+      <td class="spend-cell"><input class="spend-inp" type="text" id="sp_t2_${i}" placeholder="Enter spend…" oninput="recalc()" onblur="fc(this)"></td>
+      ${sc(lRs,`ts_t3_${i}`,'lm')}
+      <td class="prev-sp-cell"><input class="spend-inp" type="text" id="sp_t3sp_${i}" placeholder="Enter spend…" oninput="recalc()"></td>
+    </tr>`).join('');
+
+  const totT=entries.reduce((s,e)=>s+e.tRs,0);
+  const totM=entries.reduce((s,e)=>s+e.mRs,0);
+  const totL=entries.reduce((s,e)=>s+e.lRs,0);
+
+  document.getElementById('rptBody').innerHTML=rows+`
+    <tr class="rpt-total">
+      <td><i class="fas fa-sigma me-1"></i>Total</td>
+      <td class="sales-cell" id="tot_t1">${fmt(totT)}</td>
+      <td class="spend-cell"><input class="spend-inp" id="tot_sp1" readonly placeholder="Total…" style="cursor:default"></td>
+      <td class="sales-cell" id="tot_t2">${fmt(totM)}</td>
+      <td class="spend-cell"><input class="spend-inp" id="tot_sp2" readonly placeholder="Total…" style="cursor:default"></td>
+      <td class="prev-s-cell" id="tot_t3">${fmt(totL)}</td>
+      <td class="prev-sp-cell"><input class="spend-inp" id="tot_sp3" readonly placeholder="Total…" style="cursor:default"></td>
+    </tr>`;
+}
+
+function buildKPIs(D,c1,c2,c3) {
+  const sel=SELECTED_DAY;
+  const tRs=Object.values(D.portals).reduce((s,p)=>s+toLakhs(p.dailySales[sel-1]||0),0);
+  const mRs=Object.values(D.portals).reduce((s,p)=>s+toLakhs(p.dailySales.slice(0,sel).reduce((a,b)=>a+b,0)),0);
+  const lRs=toLakhs(D.totals.lm);
+  document.getElementById('kpiCards').innerHTML=`
+    <div class="kpi-card" style="border-color:#f59e0b"><div class="kpi-lbl">${c1}</div><div class="kpi-val" id="kpi_ts">₹${fmt(tRs)}</div></div>
+    <div class="kpi-card" style="border-color:#3b82f6"><div class="kpi-lbl">${c2}</div><div class="kpi-val" id="kpi_ms">₹${fmt(mRs)}</div></div>
+    <div class="kpi-card" style="border-color:#22c55e"><div class="kpi-lbl">Last Month</div><div class="kpi-val">₹${fmt(lRs)}</div></div>
+    <div class="kpi-card" style="border-color:#f97316"><div class="kpi-lbl">Today Spend</div><div class="kpi-val" id="kpi_sp1" style="font-size:.84rem;color:var(--muted)">—</div></div>
+    <div class="kpi-card" style="border-color:#7c3aed"><div class="kpi-lbl">MTD Spend</div><div class="kpi-val" id="kpi_sp2" style="font-size:.84rem;color:var(--muted)">—</div></div>
+    <div class="kpi-card" style="border-color:#0891b2"><div class="kpi-lbl">Today ROAS</div><div class="kpi-val" id="kpi_roas">—</div></div>
+    <div class="kpi-card" style="border-color:#059669"><div class="kpi-lbl">MTD ROAS</div><div class="kpi-val" id="kpi_mroas">—</div></div>`;
+}
+
+function recalc() {
+  const rows=document.querySelectorAll('#rptBody tr:not(.rpt-total)');
+  let sp1=0,sp2=0,sp3=0,ts=0,ms=0,ls=0;
+  rows.forEach((_,i)=>{
+    const cv=id=>{const el=document.getElementById(id);if(!el)return 0;const v=(el.tagName==='INPUT'?el.value:el.textContent).replace(/,/g,'').trim();return v&&!isNaN(v)?+v:0;};
+    ts+=cv(`ts_t1_${i}`);ms+=cv(`ts_t2_${i}`);ls+=cv(`ts_t3_${i}`);
+    sp1+=cv(`sp_t1_${i}`);sp2+=cv(`sp_t2_${i}`);sp3+=cv(`sp_t3sp_${i}`);
+  });
+  const st=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=fmt(v);};
+  const si=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v?fmt(v):'';};
+  st('tot_t1',ts);st('tot_t2',ms);st('tot_t3',ls);
+  si('tot_sp1',sp1);si('tot_sp2',sp2);si('tot_sp3',sp3);
+  const e1=document.getElementById('kpi_ts'),e2=document.getElementById('kpi_ms');
+  if(e1)e1.textContent='₹'+fmt(ts);if(e2)e2.textContent='₹'+fmt(ms);
+  const s1=document.getElementById('kpi_sp1'),s2=document.getElementById('kpi_sp2');
+  if(s1)s1.textContent=sp1?'₹'+fmt(sp1):'—';if(s1&&sp1)s1.style.color='';else if(s1)s1.style.color='var(--muted)';
+  if(s2)s2.textContent=sp2?'₹'+fmt(sp2):'—';if(s2&&sp2)s2.style.color='';else if(s2)s2.style.color='var(--muted)';
+  const r1=document.getElementById('kpi_roas'),r2=document.getElementById('kpi_mroas');
+  if(r1)r1.textContent=ts>0&&sp1>0?(ts/sp1).toFixed(2)+'x':'—';
+  if(r2)r2.textContent=ms>0&&sp2>0?(ms/sp2).toFixed(2)+'x':'—';
+}
+function fc(inp){const r=inp.value.replace(/,/g,'').trim();if(r&&!isNaN(r))inp.value=fmt(+r);}
+
+// ══════════════════════════════════════════════
+// EXPORT EXCEL
+// ══════════════════════════════════════════════
+function exportExcel() {
+  const sk=document.getElementById('rBrand').value;
+  if (!sk||!PARSED_DATA[sk]){toast('Generate a report first','err');return;}
+  const D=PARSED_DATA[sk],c1=document.getElementById('rCol1').value,
+        c2=document.getElementById('rCol2').value,c3=document.getElementById('rCol3').value;
+  const eRows=[[D.brand],['Portal',`${c1} Sales`,`${c1} Spend`,`${c2} Sales`,`${c2} Spend`,`${c3} Sales`,`${c3} Spend`]];
+  const entries=Object.entries(D.portals).filter(([pk])=>pk!=='')
+    .map(([pk,p])=>({pk,tRs:toLakhs(p.dailySales[SELECTED_DAY-1]||0),
+      mRs:toLakhs(p.dailySales.slice(0,SELECTED_DAY).reduce((a,b)=>a+b,0)),lRs:toLakhs(p.lm)}))
+    .sort((a,b)=>b.mRs-a.mRs);
+  entries.forEach(({pk,tRs,mRs,lRs},i)=>{
+    const cv=id=>{const el=document.getElementById(id);if(!el)return'';const v=el.tagName==='INPUT'?el.value:el.textContent;return v.replace(/,/g,'').trim()||'';};
+    eRows.push([pk,tRs,cv(`sp_t1_${i}`),mRs,cv(`sp_t2_${i}`),lRs,cv(`sp_t3sp_${i}`)]);
+  });
+  const tv=id=>{const el=document.getElementById(id);if(!el)return'';const v=el.tagName==='INPUT'?el.value:el.textContent;return v.replace(/,/g,'').trim()||'';};
+  eRows.push(['Total',tv('tot_t1'),tv('tot_sp1'),tv('tot_t2'),tv('tot_sp2'),tv('tot_t3'),tv('tot_sp3')]);
+  const ws=XLSX.utils.aoa_to_sheet(eRows),wb2=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb2,ws,'Brand Report');
+  XLSX.writeFile(wb2,`${sk.replace(/[^a-zA-Z0-9]/g,'_')}_Day${SELECTED_DAY}.xlsx`);
+  toast('Exported!','ok');
+}
+
+// ══════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════
+const nv=v=>{const x=parseFloat(v);return isNaN(x)?0:x;};
+const toLakhs=v=>Math.round(nv(v)*100000);
+const fmt=n=>{if(n===''||n==null)return'';const x=Number(n);if(isNaN(x))return'';if(!x)return'0';return x.toLocaleString('en-IN');};
+const esc=s=>String(s).replace(/'/g,"\\'").replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function prevMonth(label,fn) {
+  fn=fn.toLowerCase();
+  const idx=MONTH_NAMES.findIndex(m=>label.toLowerCase().startsWith(m.toLowerCase()));
+  if(idx>=0) return MONTH_NAMES[(idx+11)%12]+"'"+new Date().getFullYear().toString().slice(2);
+  for(let i=0;i<MONTH_NAMES.length;i++){
+    if(fn.includes(MONTH_NAMES[i].toLowerCase()))
+      return MONTH_NAMES[(i+11)%12]+"'"+new Date().getFullYear().toString().slice(2);
+  }
+  return 'Last Month';
+}
+
+function setDriveChip(state, text) {
+  const chip = document.getElementById('driveChip');
+  chip.className = 'drive-chip' + (state==='saving'?' saving':(state==='error'?' error':''));
+  document.getElementById('driveChipText').textContent = text;
+}
+
+function showLoading(show){ document.getElementById('loadingBar').style.display=show?'block':'none'; }
+function toast(msg,type=''){
+  const el=document.createElement('div');
+  el.className=`toast-msg ${type}`;el.textContent=msg;
+  document.getElementById('toastWrap').appendChild(el);
+  setTimeout(()=>el.remove(),3500);
+}
+
+// Start
+init();
+</script>
+</body>
+</html>
