@@ -509,7 +509,41 @@ async function api(path, method='GET', body=null) {
 // ══════════════════════════════════════════════
 async function init() {
   try {
-    await api('api('health')');
+    async function init() {
+  try {
+    console.log("Checking Drive...");
+
+    // Step 1: health
+    await api('health');
+
+    // Step 2: list (IMPORTANT)
+    await api('list');
+
+    DRIVE_OK = true;
+
+    // ✅ UPDATE UI
+    setDriveChip('ok', '✓ Team Drive connected');
+    document.getElementById('driveBannerTitle').textContent =
+      '✓ Team Drive connected';
+
+    document.getElementById('btnSave').disabled = false;
+    document.getElementById('btnSave2').disabled = false;
+
+    console.log("Drive connected successfully");
+
+    // load history
+    loadHistoryPanel();
+
+  } catch (err) {
+    console.error("Drive connection failed:", err);
+
+    DRIVE_OK = false;
+
+    setDriveChip('error', 'Drive unavailable');
+    document.getElementById('driveBannerTitle').textContent =
+      '⚠ Drive unavailable — check worker setup';
+  }
+}
     DRIVE_OK = true;
     setDriveChip('ok', '✓ Team Drive connected');
     document.getElementById('driveBannerTitle').textContent = '✓ Team Drive connected';
