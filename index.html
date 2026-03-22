@@ -464,7 +464,9 @@ async function api(action, method='GET', body=null, id=null) {
 
   if (body) opts.body = JSON.stringify(body);
 
-  const r = await fetch(url, opts);
+  const r = fetch("https://dsr-api.dsrwgg1.workers.dev/?action=list")
+  .then(r => r.json())
+  .then(console.log);
   const data = await r.json();
 
   if (!r.ok) throw new Error(data.error || 'API error');
