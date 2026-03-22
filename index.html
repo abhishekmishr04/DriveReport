@@ -509,7 +509,7 @@ async function api(path, method='GET', body=null) {
 // ══════════════════════════════════════════════
 async function init() {
   try {
-    await api('/api/health');
+    await api('api('health')');
     DRIVE_OK = true;
     setDriveChip('ok', '✓ Team Drive connected');
     document.getElementById('driveBannerTitle').textContent = '✓ Team Drive connected';
@@ -541,7 +541,7 @@ async function saveToDrive(silent=false) {
   const fileName = `DSR_${brands}_${date}_${time}.json`;
 
   try {
-    await api('/api/save', 'POST', {
+    await api('api('save', 'POST', {...})', 'POST', {
       fileName,
       data: {
         savedAt: now.toISOString(),
@@ -567,16 +567,16 @@ async function saveToDrive(silent=false) {
 // LIST & LOAD FROM DRIVE
 // ══════════════════════════════════════════════
 async function listFiles() {
-  const data = await api('/api/list');
+  const data = await api('api('list')');
   return data.files || [];
 }
 
 async function loadFile(fileId) {
-  return api(`/api/load?id=${fileId}`);
+  return api('load', 'GET', null, fileId);
 }
 
 async function deleteFileFromDrive(fileId) {
-  return api('/api/delete', 'POST', { id: fileId });
+  return api('api('delete', 'POST', { id })', 'POST', { id: fileId });
 }
 
 async function openDriveModal() {
