@@ -40,168 +40,99 @@ export default async function handler(req, res) {
     // ✅ SAVE EXCEL FILE
     if (action === "save" && req.method === "POST") {
 
-      console.log("Incoming body:", req.body); // 🔥 DEBUG
+  console.log("Incoming body:", req.body);
 
-      const { fileName, fileBase64 } = req.body || {};
+  let { fileName, fileBase64 } = req.body || {};
 
-      // ✅ SAFE CHECK (fix crash)
-      if (!fileName || !fileBase64) {
-        return res.status(400).json({
-          error: "fileName or fileBase64 missing",
-          received: req.body
-        });
-      }
+  // ✅ fallback support (VERY IMPORTANT FIX)
+  // if frontend accidentally sends "data" instead of fileBase64
+  if (!fileBase64 && req.body?.data) {
+    console.log("Using fallback: data → fileBase64");
+    fileBase64 = req.body.data;
+  }
 
-      let base64Data;
+  if (!fileName) {
+    fileName = "DSR-Report.xlsx"; // default name
+  }
 
-      try {
-        base64Data = fileBase64.replace(/^data:.*;base64,/, "");
-      } catch (e) {
-        return res.status(400).json({
-          error: "Invalid fileBase64 format",
-        });
-      }
-
-      const buffer = Buffer.from(base64Data, "base64");
-
-      // Step 1: Create metadata
-      const metadata = {
-        name: fileName,
-        parents: [FOLDER_ID],
-        mimeType:
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      };
-
-      const metaRes = await fetch(`${DRIVE_API}/files`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(metadata),
-      });
-
-      const metaData = await metaRes.json();
-
-      if (!metaData.id) {
-        return res.status(500).json({
-          error: "Metadata creation failed",
-          metaData
-        });
-      }
-
-      // Step 2: Upload file
-      const uploadRes = await fetch(
-        `${UPLOAD_API}/files/${metaData.id}?uploadType=media`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type":
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          },
-          body: buffer,
-        }
-      );
-
-      if (!uploadRes.ok) {
-        const errText = await uploadRes.text();
-        return res.status(500).json({
-          error: "Upload failed",
-          details: errText
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        fileId: metaData.id
-      });
-    }
-
-    // ✅ LIST FILES
-    if (action === "list") {
-      const q = encodeURIComponent(`'${FOLDER_ID}' in parents and trashed=false`);
-
-      const r = await fetch(
-        `${DRIVE_API}/files?q=${q}&fields=files(id,name)`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-
-      const data = await r.json();
-
-      return res.status(200).json(data);
-    }
-
-    // ✅ DELETE FILE
-    if (action === "delete" && req.method === "POST") {
-      const { id } = req.body;
-
-      await fetch(`${DRIVE_API}/files/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      return res.status(200).json({ ok: true });
-    }
-
-    return res.status(404).json({ error: "Unknown action" });
-
-  } catch (err) {
-    console.error("SERVER ERROR:", err);
-    return res.status(500).json({
-      error: err.message
+  if (!fileBase64) {
+    return res.status(400).json({
+      error: "fileBase64 missing",
+      received: req.body
     });
   }
-}
 
-// 🔐 TOKEN
-async function getToken() {
-  const pem = process.env.SA_KEY.replace(/\\n/g, "\n");
+  let buffer;
 
-  const { createSign } = await import("crypto");
+  try {
+    // ✅ handle both pure base64 and data URL
+    const base64Data = fileBase64.includes("base64,")
+      ? fileBase64.split("base64,")[1]
+      : fileBase64;
 
-  const now = Math.floor(Date.now() / 1000);
+    buffer = Buffer.from(base64Data, "base64");
 
-  const header = b64u(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const claims = b64u(JSON.stringify({
-    iss: SA_EMAIL,
-    scope: "https://www.googleapis.com/auth/drive",
-    aud: TOKEN_URL,
-    iat: now,
-    exp: now + 3600,
-  }));
+    if (!buffer || buffer.length === 0) {
+      throw new Error("Empty buffer");
+    }
 
-  const sign = createSign("RSA-SHA256");
-  sign.update(`${header}.${claims}`);
-
-  const signature = sign.sign(pem, "base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=/g, "");
-
-  const jwt = `${header}.${claims}.${signature}`;
-
-  const resp = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-  });
-
-  const data = await resp.json();
-
-  if (!data.access_token) {
-    throw new Error("Auth failed: " + JSON.stringify(data));
+  } catch (e) {
+    return res.status(400).json({
+      error: "Invalid base64 format",
+      details: e.message
+    });
   }
 
-  return data.access_token;
-}
+  // Step 1: metadata
+  const metadata = {
+    name: fileName,
+    parents: [FOLDER_ID],
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  };
 
-function b64u(str) {
-  return Buffer.from(str)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=/g, "");
+  const metaRes = await fetch(`${DRIVE_API}/files`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(metadata),
+  });
+
+  const metaData = await metaRes.json();
+
+  if (!metaData.id) {
+    return res.status(500).json({
+      error: "Metadata creation failed",
+      metaData
+    });
+  }
+
+  // Step 2: upload
+  const uploadRes = await fetch(
+    `${UPLOAD_API}/files/${metaData.id}?uploadType=media`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+      body: buffer,
+    }
+  );
+
+  if (!uploadRes.ok) {
+    const errText = await uploadRes.text();
+    return res.status(500).json({
+      error: "Upload failed",
+      details: errText
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    fileId: metaData.id
+  });
 }
