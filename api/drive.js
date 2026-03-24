@@ -39,17 +39,32 @@ export default async function handler(req, res) {
 
     // ✅ SAVE EXCEL FILE
     if (action === "save" && req.method === "POST") {
-      const { fileName, fileBase64 } = req.body;
 
+      console.log("Incoming body:", req.body); // 🔥 DEBUG
+
+      const { fileName, fileBase64 } = req.body || {};
+
+      // ✅ SAFE CHECK (fix crash)
       if (!fileName || !fileBase64) {
-        return res.status(400).json({ error: "fileName and fileBase64 required" });
+        return res.status(400).json({
+          error: "fileName or fileBase64 missing",
+          received: req.body
+        });
       }
 
-      // Remove base64 prefix if present
-      const base64Data = fileBase64.replace(/^data:.*;base64,/, "");
+      let base64Data;
+
+      try {
+        base64Data = fileBase64.replace(/^data:.*;base64,/, "");
+      } catch (e) {
+        return res.status(400).json({
+          error: "Invalid fileBase64 format",
+        });
+      }
+
       const buffer = Buffer.from(base64Data, "base64");
 
-      // Step 1: Create file metadata
+      // Step 1: Create metadata
       const metadata = {
         name: fileName,
         parents: [FOLDER_ID],
@@ -67,11 +82,15 @@ export default async function handler(req, res) {
       });
 
       const metaData = await metaRes.json();
+
       if (!metaData.id) {
-        return res.status(500).json({ error: "Metadata creation failed", metaData });
+        return res.status(500).json({
+          error: "Metadata creation failed",
+          metaData
+        });
       }
 
-      // Step 2: Upload content
+      // Step 2: Upload file
       const uploadRes = await fetch(
         `${UPLOAD_API}/files/${metaData.id}?uploadType=media`,
         {
@@ -86,43 +105,58 @@ export default async function handler(req, res) {
       );
 
       if (!uploadRes.ok) {
-        const err = await uploadRes.text();
-        return res.status(500).json({ error: "Upload failed", details: err });
+        const errText = await uploadRes.text();
+        return res.status(500).json({
+          error: "Upload failed",
+          details: errText
+        });
       }
 
-      return res.status(200).json({ success: true, id: metaData.id });
+      return res.status(200).json({
+        success: true,
+        fileId: metaData.id
+      });
     }
 
-    // LIST FILES
+    // ✅ LIST FILES
     if (action === "list") {
       const q = encodeURIComponent(`'${FOLDER_ID}' in parents and trashed=false`);
+
       const r = await fetch(
         `${DRIVE_API}/files?q=${q}&fields=files(id,name)`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
       );
+
       const data = await r.json();
+
       return res.status(200).json(data);
     }
 
-    // DELETE
+    // ✅ DELETE FILE
     if (action === "delete" && req.method === "POST") {
       const { id } = req.body;
+
       await fetch(`${DRIVE_API}/files/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
+
       return res.status(200).json({ ok: true });
     }
 
     return res.status(404).json({ error: "Unknown action" });
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: err.message });
+    console.error("SERVER ERROR:", err);
+    return res.status(500).json({
+      error: err.message
+    });
   }
 }
 
-// 🔐 TOKEN FUNCTION (same but safe)
+// 🔐 TOKEN
 async function getToken() {
   const pem = process.env.SA_KEY.replace(/\\n/g, "\n");
 
