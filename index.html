@@ -450,19 +450,18 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 
-const WORKER_URL = "https://dsr-api.dsrwgg1.workers.dev";
-
 // ================= API =================
+// Use relative Vercel API routes (defined in vercel.json) instead of hardcoded Cloudflare worker URL
 async function api(action, method='GET', body=null, id=null) {
-  let url = `${WORKER_URL}/?action=${action}`;
-  if (id) url += `&id=${id}`;
+  let url = `/api/${action}`;
+  if (id) url += `?id=${encodeURIComponent(id)}`;
 
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json' }
-  };
+  const opts = { method };
 
-  if (body) opts.body = JSON.stringify(body);
+  if (body) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(body);
+  }
 
   const res = await fetch(url, opts);
   const data = await res.json();
@@ -480,20 +479,16 @@ let DRIVE_OK = false;
 // ================= INIT =================
 async function init() {
   try {
+    // Only call health for connectivity check (not list redundantly)
     await api('health');
-    await api('list');
 
     DRIVE_OK = true;
-
     setDriveChip('ok', '✓ Team Drive connected');
-    document.getElementById('driveBannerTitle').textContent =
-      '✓ Team Drive connected';
-
+    document.getElementById('driveBannerTitle').textContent = '✓ Team Drive connected';
     document.getElementById('btnSave').disabled = false;
     document.getElementById('btnSave2').disabled = false;
 
     loadHistoryPanel();
-
   } catch (err) {
     console.error(err);
     DRIVE_OK = false;
@@ -505,25 +500,28 @@ async function init() {
 
 // ================= SAVE =================
 async function saveToDrive(silent=false) {
-  if (!DRIVE_OK) return;
+  if (!DRIVE_OK) { toast('Drive not connected', 'err'); return; }
+  if (!Object.keys(PARSED_DATA).length) { toast('No data to save', 'err'); return; }
 
   const now = new Date();
-  const fileName = `DSR_${now.getTime()}.json`;
+  const label = CURRENT_FILE
+    ? CURRENT_FILE.replace(/\.[^.]+$/, '')
+    : 'DSR';
+  const fileName = `${label}_${now.toISOString().slice(0,10)}_${now.getTime()}.json`;
 
+  setDriveChip('saving', 'Saving…');
   try {
-    await api('save','POST',{
+    await api('save', 'POST', {
       fileName,
-      data:{
-        savedAt: now.toISOString(),
-        parsedData: PARSED_DATA
-      }
+      data: { savedAt: now.toISOString(), fileName: CURRENT_FILE, parsedData: PARSED_DATA }
     });
-
-    setDriveChip('ok','Saved');
+    setDriveChip('ok', '✓ Saved to Drive');
+    if (!silent) toast('Saved to Drive ✓', 'ok');
     loadHistoryPanel();
-
-  } catch(err){
+  } catch(err) {
     console.error(err);
+    setDriveChip('error', 'Save failed');
+    toast('Save failed: ' + err.message, 'err');
   }
 }
 
@@ -534,42 +532,430 @@ async function listFiles() {
 }
 
 async function loadFile(fileId) {
-  return api('load','GET',null,fileId);
+  return api('load', 'GET', null, fileId);
 }
 
 async function deleteFileFromDrive(fileId) {
-  return api('delete','POST',{id:fileId});
+  return api('delete', 'POST', { id: fileId });
 }
 
-// ================= HISTORY =================
+// ================= HISTORY PANEL (upload screen) =================
 async function loadHistoryPanel() {
   const list = document.getElementById('historyList');
+  list.innerHTML = '<div style="text-align:center;padding:10px;font-size:.76rem;color:var(--muted)"><i class="fas fa-spinner fa-spin me-2"></i>Loading…</div>';
 
   try {
     const files = await listFiles();
 
     if (!files.length) {
-      list.innerHTML = 'No saved reports';
+      list.innerHTML = '<div style="text-align:center;padding:14px;font-size:.76rem;color:var(--muted)">No saved reports yet</div>';
       return;
     }
 
-    list.innerHTML = files.map(f => `
-      <div class="hi-row">${f.name}</div>
+    // Show up to 5 most recent files with Load + Delete buttons
+    list.innerHTML = files.slice(0, 5).map(f => `
+      <div class="hi-row">
+        <div class="hi-icon"><i class="fas fa-file-alt" style="color:#34a853"></i></div>
+        <div class="hi-info">
+          <div class="hi-name" title="${escHtml(f.name)}">${escHtml(f.name)}</div>
+          <div class="hi-meta">${formatDate(f.modifiedTime)} · ${formatSize(f.size)}</div>
+        </div>
+        <button class="btn-load" onclick="loadFromDrive('${f.id}','${escHtml(f.name)}')">Load</button>
+        <button class="btn-del" title="Delete" onclick="confirmDelete('${f.id}','${escHtml(f.name)}',this)"><i class="fas fa-trash"></i></button>
+      </div>
     `).join('');
-
-  } catch {
-    list.innerHTML = 'Drive error';
+  } catch(e) {
+    list.innerHTML = '<div style="text-align:center;padding:10px;font-size:.76rem;color:var(--red)">Drive error — could not load history</div>';
   }
+}
+
+// ================= DRIVE MODAL =================
+function openDriveModal() {
+  document.getElementById('driveModal').style.display = 'block';
+  refreshDriveModal();
+}
+
+function closeDriveModal() {
+  document.getElementById('driveModal').style.display = 'none';
+}
+
+async function refreshDriveModal() {
+  const body = document.getElementById('driveModalBody');
+  body.innerHTML = '<div style="text-align:center;padding:18px;font-size:.8rem;color:var(--muted)"><i class="fas fa-spinner fa-spin me-2"></i>Loading…</div>';
+
+  try {
+    const files = await listFiles();
+
+    if (!files.length) {
+      body.innerHTML = '<div class="modal-empty"><i class="fas fa-folder-open"></i><div>No saved reports in Drive</div></div>';
+      return;
+    }
+
+    body.innerHTML = files.map(f => `
+      <div class="df-row">
+        <div class="df-icon"><i class="fas fa-file-alt" style="color:#34a853"></i></div>
+        <div class="df-info">
+          <div class="df-name" title="${escHtml(f.name)}">${escHtml(f.name)}</div>
+          <div class="df-meta">${formatDate(f.modifiedTime)} · ${formatSize(f.size)}</div>
+        </div>
+        <button class="df-load" onclick="loadFromDrive('${f.id}','${escHtml(f.name)}');closeDriveModal()">Load</button>
+        <button class="df-del" title="Delete" onclick="confirmDelete('${f.id}','${escHtml(f.name)}',this,true)"><i class="fas fa-trash"></i></button>
+      </div>
+    `).join('');
+  } catch(e) {
+    body.innerHTML = '<div class="modal-empty" style="color:var(--red)"><i class="fas fa-exclamation-triangle"></i><div>Could not load files from Drive</div></div>';
+  }
+}
+
+// ================= LOAD FROM DRIVE =================
+async function loadFromDrive(fileId, fileName) {
+  toast('Loading report…', 'info');
+  try {
+    const saved = await loadFile(fileId);
+    if (!saved.parsedData) throw new Error('Invalid file format');
+
+    PARSED_DATA  = saved.parsedData;
+    CURRENT_FILE = saved.fileName || fileName;
+    document.getElementById('topFileName').textContent = CURRENT_FILE;
+
+    populateBrandSelect();
+    showReportScreen();
+    toast('Loaded: ' + fileName, 'ok');
+  } catch(e) {
+    toast('Load failed: ' + e.message, 'err');
+  }
+}
+
+// ================= DELETE =================
+async function confirmDelete(fileId, fileName, btn, inModal=false) {
+  if (!confirm(`Delete "${fileName}"?`)) return;
+  btn.disabled = true;
+  try {
+    await deleteFileFromDrive(fileId);
+    toast('Deleted ✓', 'ok');
+    if (inModal) refreshDriveModal();
+    else loadHistoryPanel();
+  } catch(e) {
+    toast('Delete failed: ' + e.message, 'err');
+    btn.disabled = false;
+  }
+}
+
+// ================= FILE UPLOAD =================
+function handleFile(file) {
+  if (!file) return;
+  CURRENT_FILE = file.name;
+  document.getElementById('topFileName').textContent = file.name;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      PARSED_DATA = parseWorkbook(wb);
+
+      if (!Object.keys(PARSED_DATA).length) {
+        toast('No brand data found in this file', 'err');
+        return;
+      }
+
+      populateBrandSelect();
+      showReportScreen();
+      if (DRIVE_OK) saveToDrive(true);
+    } catch(err) {
+      toast('Failed to parse Excel: ' + err.message, 'err');
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ================= EXCEL PARSER =================
+// Parses a DSR workbook. Expects sheets named by brand.
+// Each sheet should have columns: Portal, Today Sales, MTD Sales, Last Month Sales, Ads Spend columns.
+// Flexible: tries to auto-detect header row and column positions.
+function parseWorkbook(wb) {
+  const result = {};
+
+  wb.SheetNames.forEach(sheetName => {
+    const ws   = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    // Find the header row (first row containing 'portal' case-insensitive)
+    let hdrIdx = rows.findIndex(r =>
+      r.some(c => String(c).toLowerCase().includes('portal'))
+    );
+    if (hdrIdx === -1) hdrIdx = 0;
+
+    const headers = rows[hdrIdx].map(h => String(h).toLowerCase().trim());
+
+    // Helper to find column index by keyword
+    const col = (...keys) => {
+      for (const k of keys) {
+        const i = headers.findIndex(h => h.includes(k));
+        if (i !== -1) return i;
+      }
+      return -1;
+    };
+
+    const iPortal    = col('portal', 'platform', 'channel');
+    const iTodaySale = col('today sale', 'today s');
+    const iMtdSale   = col('mtd sale', 'mtd s', 'month to date');
+    const iPrevSale  = col('last month sale', 'prev sale', 'lm sale');
+    const iTodaySp   = col('today spend', 'today ad', 'today sp');
+    const iMtdSp     = col('mtd spend', 'mtd ad');
+    const iPrevSp    = col('last month spend', 'prev spend', 'lm spend');
+
+    const portals = [];
+
+    for (let i = hdrIdx + 1; i < rows.length; i++) {
+      const r = rows[i];
+      const portal = iPortal >= 0 ? String(r[iPortal] || '').trim() : '';
+      if (!portal || portal.toLowerCase() === 'total') continue;
+
+      portals.push({
+        portal,
+        todaySales : parseNum(r[iTodaySale]),
+        mtdSales   : parseNum(r[iMtdSale]),
+        prevSales  : parseNum(r[iPrevSale]),
+        todaySpend : parseNum(r[iTodaySp]),
+        mtdSpend   : parseNum(r[iMtdSp]),
+        prevSpend  : parseNum(r[iPrevSp]),
+      });
+    }
+
+    if (portals.length) result[sheetName] = portals;
+  });
+
+  return result;
+}
+
+function parseNum(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+// ================= REPORT =================
+function populateBrandSelect() {
+  const sel = document.getElementById('rBrand');
+  const brands = Object.keys(PARSED_DATA);
+  sel.innerHTML = '<option value="">— Select Brand —</option>' +
+    brands.map(b => `<option value="${escHtml(b)}">${escHtml(b)}</option>`).join('');
+  if (brands.length === 1) {
+    sel.value = brands[0];
+    generateReport();
+  }
+}
+
+function showReportScreen() {
+  document.getElementById('uploadScreen').style.display = 'none';
+  document.getElementById('reportScreen').style.display = 'block';
+  // Reset day nav
+  SELECTED_DAY = 1;
+  updateDayNav();
+}
+
+function generateReport() {
+  const brand = document.getElementById('rBrand').value;
+  if (!brand || !PARSED_DATA[brand]) {
+    document.getElementById('rptBody').innerHTML =
+      '<tr><td colspan="7" class="text-center text-muted py-4">Select a brand above</td></tr>';
+    document.getElementById('kpiCards').innerHTML = '';
+    return;
+  }
+
+  const portals = PARSED_DATA[brand];
+  const col1 = document.getElementById('rCol1').value || 'Today';
+  const col2 = document.getElementById('rCol2').value || 'MTD';
+  const col3 = document.getElementById('rCol3').value || 'Last Month';
+
+  document.getElementById('hdr1').textContent = col1;
+  document.getElementById('hdr2').textContent = col2;
+  document.getElementById('hdr3').textContent = col3;
+  document.getElementById('rptHdr').textContent = brand + ' — DSR Report';
+
+  // Totals
+  let totTodaySales=0, totMtdSales=0, totPrevSales=0;
+  let totTodaySpend=0, totMtdSpend=0, totPrevSpend=0;
+
+  const rows = portals.map(p => {
+    totTodaySales += p.todaySales || 0;
+    totMtdSales   += p.mtdSales   || 0;
+    totPrevSales  += p.prevSales  || 0;
+    totTodaySpend += p.todaySpend || 0;
+    totMtdSpend   += p.mtdSpend   || 0;
+    totPrevSpend  += p.prevSpend  || 0;
+
+    const noData = p.todaySales === null;
+    const salesCls = noData ? 'enter-cell' : 'sales-cell';
+    const salesInp = noData
+      ? `<input class="enter-inp" placeholder="enter…" data-portal="${escHtml(p.portal)}" data-col="todaySales">`
+      : fmt(p.todaySales);
+
+    return `<tr>
+      <td class="gh-portal">${portalPill(p.portal)}</td>
+      <td class="${salesCls}">${noData ? `<input class="enter-inp" placeholder="enter…">` : fmt(p.todaySales)}</td>
+      <td class="spend-cell"><input class="spend-inp" value="${p.todaySpend !== null ? fmt(p.todaySpend) : ''}" placeholder="enter spend…"></td>
+      <td class="sales-cell">${fmt(p.mtdSales)}</td>
+      <td class="spend-cell"><input class="spend-inp" value="${p.mtdSpend !== null ? fmt(p.mtdSpend) : ''}" placeholder="enter spend…"></td>
+      <td class="prev-s-cell">${fmt(p.prevSales)}</td>
+      <td class="prev-sp-cell"><input class="spend-inp" value="${p.prevSpend !== null ? fmt(p.prevSpend) : ''}" placeholder="enter spend…"></td>
+    </tr>`;
+  });
+
+  // Total row
+  rows.push(`<tr class="rpt-total">
+    <td>TOTAL</td>
+    <td class="sales-cell">${fmt(totTodaySales)}</td>
+    <td class="spend-cell">${fmt(totTodaySpend)}</td>
+    <td class="sales-cell">${fmt(totMtdSales)}</td>
+    <td class="spend-cell">${fmt(totMtdSpend)}</td>
+    <td class="prev-s-cell">${fmt(totPrevSales)}</td>
+    <td class="prev-sp-cell">${fmt(totPrevSpend)}</td>
+  </tr>`);
+
+  document.getElementById('rptBody').innerHTML = rows.join('');
+
+  // KPI cards
+  const roas = totTodaySpend > 0 ? (totTodaySales / totTodaySpend).toFixed(2) : '—';
+  document.getElementById('kpiCards').innerHTML = `
+    <div class="kpi-card" style="border-color:#f59e0b">
+      <div class="kpi-lbl">Today Sales</div>
+      <div class="kpi-val">${fmt(totTodaySales)}</div>
+    </div>
+    <div class="kpi-card" style="border-color:#3b82f6">
+      <div class="kpi-lbl">MTD Sales</div>
+      <div class="kpi-val">${fmt(totMtdSales)}</div>
+    </div>
+    <div class="kpi-card" style="border-color:#22c55e">
+      <div class="kpi-lbl">Last Month</div>
+      <div class="kpi-val">${fmt(totPrevSales)}</div>
+    </div>
+    <div class="kpi-card" style="border-color:#f87171">
+      <div class="kpi-lbl">Today Spend</div>
+      <div class="kpi-val">${fmt(totTodaySpend)}</div>
+    </div>
+    <div class="kpi-card" style="border-color:#a855f7">
+      <div class="kpi-lbl">ROAS (Today)</div>
+      <div class="kpi-val">${roas}</div>
+      <div class="kpi-sub">Sales ÷ Spend</div>
+    </div>
+    <div class="kpi-card" style="border-color:#06b6d4">
+      <div class="kpi-lbl">Portals</div>
+      <div class="kpi-val">${portals.length}</div>
+    </div>
+  `;
+}
+
+// ================= DAY NAV =================
+function updateDayNav() {
+  document.getElementById('dayLabel').textContent = `Day ${SELECTED_DAY}`;
+  document.getElementById('btnPrev').disabled = SELECTED_DAY <= 1;
+  document.getElementById('btnNext').disabled = SELECTED_DAY >= DAYS_ELAPSED;
+}
+
+function changeDay(delta) {
+  const next = SELECTED_DAY + delta;
+  if (next < 1 || next > DAYS_ELAPSED) return;
+  SELECTED_DAY = next;
+  updateDayNav();
+  generateReport();
+}
+
+// ================= EXPORT =================
+function exportExcel() {
+  const brand = document.getElementById('rBrand').value;
+  if (!brand) { toast('Select a brand first', 'err'); return; }
+
+  const table = document.querySelector('.rpt-table');
+  if (!table) { toast('No report to export', 'err'); return; }
+
+  // Build data from the table (including editable input values)
+  const wb = XLSX.utils.book_new();
+  const rows = [];
+
+  table.querySelectorAll('tr').forEach(tr => {
+    const row = [];
+    tr.querySelectorAll('th, td').forEach(cell => {
+      const inp = cell.querySelector('input');
+      row.push(inp ? (inp.value || '') : cell.innerText.trim());
+    });
+    rows.push(row);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, brand.slice(0, 31));
+
+  const now = new Date();
+  const fname = `DSR_${brand}_${now.toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, fname);
+  toast('Exported: ' + fname, 'ok');
+}
+
+// ================= DRAG & DROP =================
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+// ================= HELPERS =================
+function fmt(v) {
+  if (v === null || v === undefined || v === '') return '<span style="color:#cbd5e1">—</span>';
+  return Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '';
+  const kb = bytes / 1024;
+  return kb < 1024 ? kb.toFixed(1) + ' KB' : (kb/1024).toFixed(1) + ' MB';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function portalPill(name) {
+  const n = name.toLowerCase();
+  let cls = 'pb-oth';
+  if (n.includes('flipkart') || n.includes('fk')) cls = 'pb-fk';
+  else if (n.includes('amazon') || n.includes('amz')) cls = 'pb-az';
+  else if (n.includes('meesho') || n.includes('ms')) cls = 'pb-ms';
+  else if (n.includes('myntra') || n.includes('mn')) cls = 'pb-mn';
+  else if (n.includes('zepto') || n.includes('zt')) cls = 'pb-zt';
+  return `<span class="${cls}">${escHtml(name)}</span>`;
+}
+
+function toast(msg, type='info') {
+  const w = document.getElementById('toastWrap');
+  const d = document.createElement('div');
+  d.className = `toast-msg ${type}`;
+  d.textContent = msg;
+  w.appendChild(d);
+  setTimeout(() => d.remove(), 3200);
 }
 
 // ================= UI =================
 function setDriveChip(state, text) {
   const chip = document.getElementById('driveChip');
   chip.className = 'drive-chip' +
-    (state==='error'?' error':(state==='saving'?' saving':''));
-
+    (state==='error' ? ' error' : state==='saving' ? ' saving' : '');
   document.getElementById('driveChipText').textContent = text;
 }
+
+// Close modal when clicking the backdrop overlay (not the box itself)
+document.querySelector('#driveModal .modal-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeDriveModal();
+});
 
 // ================= START =================
 init();
